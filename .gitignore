@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+.vscode/
+.idea/
+config.toml
+config2.toml
+server-config.toml
