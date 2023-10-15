@@ -207,7 +207,7 @@ class Client(AsyncApp):
                         event.set()
 
             else:
-                logger.debug(msg)
+                logger.debug("Unknown payload: %s", msg)
 
     async def pro6_send_hello(self) -> None:
         payload = {"action": "authenticate", "protocol": 600, "password": self.config["propresenter"]["password"]}
@@ -300,7 +300,7 @@ class Client(AsyncApp):
 
             del self.pending[msg_ts]
 
-        number = re.search(r"\d{4}", content)
+        number = re.search(r"(?:\d|[A-Z]){3,4}", content)
 
         if number:
             self.last_number = number.group(0)
