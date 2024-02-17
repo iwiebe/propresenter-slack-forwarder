@@ -11,4 +11,4 @@ python -m nuitka \
     --macos-sign-identity=F111476C1F677359D5FDF05340F20186C2C53930 \
     --macos-create-app-bundle \
     --macos-app-icon=data/logo.icns \
-    bot_ui.py
+    VKPager.py
