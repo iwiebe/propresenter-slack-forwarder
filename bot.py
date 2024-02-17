@@ -2,6 +2,7 @@ import asyncio
 import asyncio.mixins
 import collections
 import logging
+from logging.handlers import RotatingFileHandler
 import re
 import os
 import time
@@ -22,6 +23,14 @@ handler.setFormatter(formatter)
 handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 logging.getLogger("root").setLevel(logging.INFO)
+
+home = os.environ["HOME"]
+os.makedirs(home + "/Documents/Village Kids Pager", exist_ok=True)
+
+handler = RotatingFileHandler(home + "/Documents/Village Kids Pager/app-log.log", backupCount=3, maxBytes=100000)
+handler.setFormatter(formatter)
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 
 class SetUnsetEvent(asyncio.Event):
@@ -83,7 +92,6 @@ class Client(AsyncApp):
     def __init__(self) -> None:
         cfg = "config.toml"
         if not os.path.exists(cfg):
-            home = os.environ["HOME"]
             cfg = home + "/Documents/Village Kids Pager/config.toml"
         
         if not os.path.exists(cfg) or os.path.isdir(cfg):
@@ -98,6 +106,7 @@ class Client(AsyncApp):
 
         self.version: int = self.config["propresenter"]["v"]
         self.prop_ws: aiohttp.ClientWebSocketResponse | None = None
+        self.prop_ws_try_again_at = None
         self.prop_authenticated = False
 
         self._tasks = []
@@ -107,9 +116,11 @@ class Client(AsyncApp):
 
         self.current_batch: list[tuple[str, str]] = []
         self.current_batch_expires: int | None = None
+
+        self.current_formatted = None
     
     def setup_config(self):
-        file = os.environ["HOME"] + "/Documents/Village Kids Pager/config.toml"
+        file = home + "/Documents/Village Kids Pager/config.toml"
         os.makedirs(os.path.dirname(file), exist_ok=True)
 
         if os.path.isdir(file):
@@ -151,8 +162,8 @@ class Client(AsyncApp):
         if not self.current_batch_expires:
             self.current_batch_expires = now + batch_wait
 
-    async def process_number_batch(
-        self, items: tuple[tuple[str, str]]
+    def process_number_batch(
+        self, items: tuple[tuple[str, str], ...]
     ) -> tuple[str, tuple[str, ...]]:  # returns the formatted numbers and the nonces
         nonces = tuple(item[0] for item in items)
         numbers = tuple(item[1] for item in items)
@@ -176,13 +187,15 @@ class Client(AsyncApp):
             nums = await self.number_queue.get()
             logger.info(f"got number(s): {nums}, sending!")
 
-            formatted, msg_ids = await self.process_number_batch(nums)
+            formatted, msg_ids = self.process_number_batch(nums)
+            self.current_formatted = formatted
 
             self._current_nonce = msg_ids
             await self.propres_send_number(formatted)
 
             if self.version == 7:
                 await self.pro7_send_waiter(msg_ids)
+                self.current_formatted = None
 
     async def pro7_send_waiter(self, nonces: tuple[str, ...]) -> None:
         # pro7 doesnt send feedback for setting / hiding, so we have to guess based on timing.
@@ -203,7 +216,17 @@ class Client(AsyncApp):
 
     async def task_prop_ws_pump(self) -> None:
         while self.prop_ws and not self.prop_ws.closed:
-            msg = await self.prop_ws.receive_json()
+            try:
+                msg = await self.prop_ws.receive_json()
+            except Exception as e:
+                if not self.prop_ws.closed:
+                    await self.prop_ws.close()
+                
+                logger.error("Disconnected from propresenter:", exc_info=e)
+                
+                asyncio.create_task(self.setup_prop_connection())
+                return
+                
             logger.debug(f"debug ws: {msg}")
             if msg["action"] == "authenticate":
                 self.prop_authenticated = bool(msg["authenticated"])
@@ -224,6 +247,7 @@ class Client(AsyncApp):
                         event.set_secondary()
 
                 self._current_nonce = None
+                self.current_formatted = None
 
             elif msg["action"] == "messageSend":  # PRO6 ONLY, MANUAL TIMER FOR PRO7
                 self.available.clear()
@@ -231,6 +255,9 @@ class Client(AsyncApp):
                     for nonce in self._current_nonce:
                         event = self.pending[nonce]
                         event.set()
+                    
+                    self._current_nonce = None
+                    self.current_formatted = None
             
             elif msg["action"] == "presentationTriggerIndex": # ignore this event
                 return
@@ -286,17 +313,33 @@ class Client(AsyncApp):
         host = self.config["propresenter"]["host"]
         port = self.config["propresenter"]["port"]
 
-        self.prop_ws = await client.ws_connect(f"ws://{host}:{port}/remote")
-        client.detach()
+        backoff = 1
 
-        self._tasks.append(asyncio.create_task(self.task_prop_ws_pump()))
+        while True:
 
-        if self.version == 6:
-            await self.pro6_send_hello()
-        elif self.version == 7:
-            await self.pro7_send_hello()
-        else:
-            raise RuntimeError(f"Version must be 6 or 7, not {self.version}")
+            try:
+                self.prop_ws = await client.ws_connect(f"ws://{host}:{port}/remote")
+            except Exception as e:
+                backoff *= 2
+                logger.error("An error occurred while connecting to propresenter:", exc_info=e)
+                logger.warning(f"failed to connect to propresenter, setting backoff to {backoff} and waiting to try again")
+
+                await asyncio.sleep(backoff)
+                continue
+            
+            backoff = 1
+            client.detach()
+
+            self._tasks.append(asyncio.create_task(self.task_prop_ws_pump()))
+
+            if self.version == 6:
+                await self.pro6_send_hello()
+            elif self.version == 7:
+                await self.pro7_send_hello()
+            else:
+                raise RuntimeError(f"Version must be 6 or 7, not {self.version}")
+            
+            break
 
     async def on_message(self, message: dict) -> None:
         logger.debug("received message from slack: %s", message)
@@ -385,10 +428,10 @@ class Client(AsyncApp):
         super().__init__(token=self.config["bot"]["bot-token"]) # cursed
         self.event("message")(self.on_message)
 
-        await self.setup_prop_connection()
+        asyncio.create_task(self.setup_prop_connection())
 
-        handler = AsyncSocketModeHandler(self, self.config["bot"]["app-token"])
-        await handler.start_async()
+        self.handler = AsyncSocketModeHandler(self, self.config["bot"]["app-token"])
+        await self.handler.start_async()
     
     def run(self):
         asyncio.run(self.start())

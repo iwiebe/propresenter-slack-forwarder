@@ -1,33 +1,15 @@
 import sys
-import io
-import os
-import json
-
-class Stream(io.StringIO):
-    def write(self, __s: str) -> int:
-        label.setText("\n".join((label.text()+__s).splitlines()[:100]))
-        return 0
-
-sys.stderr = Stream()
-
 import threading
-from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication
+from ui.main import MainWindow
 
-
-def run_client():
-    import bot
-    client = bot.Client()
-    client.run()
+import bot
+client = bot.Client()
 
 app = QApplication(sys.argv)
-scrollarea = QWidget()
-box = QVBoxLayout()
-scrollarea.setLayout(box)
-label = QLabel("Hello World")
-box.addWidget(label)
-scrollarea.show()
-thread = threading.Thread(target=run_client, name="Client Thread")
-thread.daemon = True
+main = MainWindow(client)
+thread = threading.Thread(target=client.run, name="Asyncio Thread", daemon=True)
 thread.start()
 
+main.show()
 app.exec()
