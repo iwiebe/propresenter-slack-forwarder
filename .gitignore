@@ -5,3 +5,8 @@ __pycache__/
 config.toml
 config2.toml
 server-config.toml
+*.build/
+*.dist/
+*.app/
+build/
+dist/

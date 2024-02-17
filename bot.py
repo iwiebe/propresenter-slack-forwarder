@@ -3,13 +3,15 @@ import asyncio.mixins
 import collections
 import logging
 import re
+import os
 import time
 import tomllib
 
 import aiohttp
-
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
+
+import config_example
 
 logger = logging.getLogger("bot")
 logger.setLevel(10)
@@ -17,7 +19,7 @@ dt_fmt = '%Y-%m-%d %H:%M:%S'
 formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
-handler.setLevel(10)
+handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 logging.getLogger("root").setLevel(logging.INFO)
 
@@ -79,8 +81,20 @@ class DoubleEvent(asyncio.Event):
 
 class Client(AsyncApp):
     def __init__(self) -> None:
-        with open("config.toml") as f:
+        cfg = "config.toml"
+        if not os.path.exists(cfg):
+            home = os.environ["HOME"]
+            cfg = home + "/Documents/Village Kids Pager/config.toml"
+        
+        if not os.path.exists(cfg) or os.path.isdir(cfg):
+            self.setup_config()
+            #raise SystemExit(-1) # TODO: raise notification if not configured (pync?)
+        
+        with open(cfg) as f:
             self.config = tomllib.loads(f.read())
+        
+        if not self.config["propresenter"]["password"]:
+            raise SystemExit(-1) # TODO: raise notification if not configured (pync?)
 
         self.version: int = self.config["propresenter"]["v"]
         self.prop_ws: aiohttp.ClientWebSocketResponse | None = None
@@ -93,6 +107,18 @@ class Client(AsyncApp):
 
         self.current_batch: list[tuple[str, str]] = []
         self.current_batch_expires: int | None = None
+    
+    def setup_config(self):
+        file = os.environ["HOME"] + "/Documents/Village Kids Pager/config.toml"
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+
+        if os.path.isdir(file):
+            os.rmdir(file)
+
+        with open(file, "w") as f:
+            f.write(config_example.example)
+        
+        print(os.path.abspath(file))
 
     async def task_add_batch_to_queue(self):
         batch_max: int = self.config["propresenter"]["batch-max-count"]
@@ -114,7 +140,7 @@ class Client(AsyncApp):
                 self.current_batch = []
                 self.current_batch_expires = None
 
-            self.number_queue.put_nowait(tuple(batch))
+            self.number_queue.put_nowait(tuple(batch)) # type: ignore
 
     def add_to_queue(self, item: tuple[str, str]) -> None:
         now = int(time.time())
@@ -205,6 +231,9 @@ class Client(AsyncApp):
                     for nonce in self._current_nonce:
                         event = self.pending[nonce]
                         event.set()
+            
+            elif msg["action"] == "presentationTriggerIndex": # ignore this event
+                return
 
             else:
                 logger.debug("Unknown payload: %s", msg)
@@ -343,7 +372,7 @@ class Client(AsyncApp):
                     self.config["bot"]["bot-token"] = data["bot-token"]
                     logger.info("Successfully fetched tokens")
                 except:
-                    logger.debug(await resp.text())
+                    logger.critical(await resp.text())
                     raise RuntimeError("Unable to fetch tokens, could not use returned payload")
 
     async def start(self):
@@ -363,7 +392,3 @@ class Client(AsyncApp):
     
     def run(self):
         asyncio.run(self.start())
-    
-
-client = Client()
-client.run()
