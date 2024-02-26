@@ -33,7 +33,7 @@ class Overview(QWidget):
 
         # left side
         left = QVBoxLayout()
-        self.active = QLabel("Active Number:")
+        self.active = QLabel("Active Number: N/A")
         self.active.setAlignment(Qt.AlignmentFlag.AlignLeading)
         left.addWidget(self.active)
 
@@ -79,13 +79,22 @@ class Overview(QWidget):
                 self.status.propresenter_status.setText("ProPres: Disconnected")
 
             # then manage active numbers
+            txt = ""
+            if self.main.client.last_number:
+                txt = f"Last Number: {self.main.client.last_number}\n"
+            
             if self.main.client.current_formatted is not None:
                 if len(self.main.client._current_nonce) > 1: # type: ignore
                     s = "s"
                 else:
                     s = ""
                 
-                self.active.setText(f"Active Number{s}: {self.main.client.current_formatted}")
+                txt += f"Active Number{s}: {self.main.client.current_formatted}"
+            
+            else:
+                txt += "Active Number: N/A"
+            
+            self.active.setText(txt.strip())
             
             # then queued numbers:
             queue: list[tuple[tuple[str, str], ...]] = list(self.main.client.number_queue._queue) # type: ignore
