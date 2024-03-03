@@ -1,6 +1,6 @@
 import sys
 import threading
-from PySide6.QtWidgets import QApplication
+from PySide2.QtWidgets import QApplication
 from ui.main import MainWindow
 
 import bot
@@ -12,4 +12,4 @@ thread = threading.Thread(target=client.run, name="Asyncio Thread", daemon=True)
 thread.start()
 
 main.show()
-app.exec()
+app.exec_()
