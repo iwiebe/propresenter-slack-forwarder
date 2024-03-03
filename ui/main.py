@@ -1,4 +1,4 @@
-from PySide2.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 from .overview import Overview
 from bot import Client

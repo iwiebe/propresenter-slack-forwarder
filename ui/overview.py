@@ -1,6 +1,6 @@
 from __future__ import annotations
-from PySide2.QtWidgets import * # type: ignore
-from PySide2.QtCore import Qt
+from PySide6.QtWidgets import * # type: ignore
+from PySide6.QtCore import Qt
 import threading
 import time
 
@@ -14,7 +14,7 @@ class Status(QWidget):
         super().__init__()
         self.main = main
 
-        self._layout = QVBoxLayout(self)
+        self._layout = QVBoxLayout()
         self.setLayout(self._layout)
 
         self.slack_status = QLabel("Slack: Disconnected")
@@ -28,23 +28,23 @@ class Overview(QWidget):
     def __init__(self, main: MainWindow) -> None:
         super().__init__()
         self.main = main
-        self._layout = QHBoxLayout(self)
+        self._layout = QHBoxLayout()
         self.setLayout(self._layout)
 
         # left side
-        left = QVBoxLayout(self)
+        left = QVBoxLayout()
         self.active = QLabel("Active Number: N/A")
-        #self.active.setAlignment(Qt.Alignment)
+        self.active.setAlignment(Qt.AlignmentFlag.AlignLeading)
         left.addWidget(self.active)
 
         self.queue = QLabel("Numbers Queued:")
-        #self.queue.setAlignment(Qt.AlignmentFlag.AlignLeading)
+        self.queue.setAlignment(Qt.AlignmentFlag.AlignLeading)
         left.addWidget(self.queue)
 
         self._layout.addLayout(left)
 
         # right side
-        right = QVBoxLayout(self)
+        right = QVBoxLayout()
         self.status = Status(main)
         right.addWidget(self.status)
 
