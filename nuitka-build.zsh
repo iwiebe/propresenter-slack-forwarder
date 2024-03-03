@@ -4,7 +4,7 @@ python -m nuitka \
     --product-version=1.0.0 \
     --copyright=Angelo\ Manca \
     --standalone \
-    --enable-plugin=pyside2 \
+    --enable-plugin=pyside6 \
     --macos-app-name=Village\ Kids\ Pager \
     --macos-app-mode=gui \
     --macos-signed-app-name=com.amanca.VKPager \
