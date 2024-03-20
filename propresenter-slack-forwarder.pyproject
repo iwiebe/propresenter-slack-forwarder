@@ -1,0 +1,13 @@
+{
+    "files": [
+        "main.py",
+        "ui/overview.py",
+        "ui/mainwindow.py",
+        "requirements.txt",
+        "bot.py",
+        "config_example.py",
+        "config.example.toml",
+        "README.md",
+        "nuitka-build.zsh"
+    ]
+}

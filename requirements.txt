@@ -1,4 +1,6 @@
 slack-bolt
 aiohttp
-pyside2
 nuitka
+pyside6
+asyncio
+imageio

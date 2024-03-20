@@ -9,6 +9,7 @@ class MainWindow(QMainWindow):
         self.client = client
 
         self.setWindowTitle("Village Kids Pager")
+        self.resize(300,200)
         
         self.currentPage = Overview(self)
         self.setCentralWidget(self.currentPage)
