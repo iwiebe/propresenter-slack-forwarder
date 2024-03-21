@@ -1,4 +1,4 @@
 slack-bolt
 aiohttp
-pyside2
+pyside6
 nuitka
