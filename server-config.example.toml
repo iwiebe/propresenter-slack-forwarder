@@ -1,0 +1,5 @@
+client-id = ""
+client-secret = ""
+app-token = "" # get this from the slack developer app dashboard, need to generate it
+port = 3334
+simpleauth-pass = ""
