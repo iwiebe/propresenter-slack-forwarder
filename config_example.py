@@ -1,8 +1,10 @@
+# this was the easiest way to bundle the example file into the executable...
 example = """
 [bot]
 bot-token = "" # optional key, if you dont fill this in itll pull from the configured network
 app-token = "" # also optional
 listen-channel = "" # the slack channel to listen to
+ignore-numbers = ["5555", "7777", ""] # these won't be sent automatically
 
 [propresenter]
 v = 6 # or 7

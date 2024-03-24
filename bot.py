@@ -375,10 +375,15 @@ class Client(AsyncApp):
 
             del self.pending[msg_ts]
 
-        number = re.search(r"(?:\d|[A-Z]){3,4}", content)
+        number = re.search(r"(?:\d){4}", content)
 
         if number:
-            self.last_number = number.group(0)
+            num = number.group(0)
+            if num in self.config["bot"].get("ignore-numbers", []):
+                await self.client.reactions_add(channel=channel_id, name="x", timestamp=msg_ts) # RED CROSS
+                return
+
+            self.last_number = num
             await sender(self.last_number)
 
         elif "repeat" in content.lower():
