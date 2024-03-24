@@ -17,4 +17,5 @@
 - Input Channel ID from Input field
 - Can we pull a list of available channels?
 - Block numbers matching our Emergency codes
+- Add logging level to config file, duplicate console out to log file for Debug level
 
