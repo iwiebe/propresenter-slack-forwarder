@@ -349,6 +349,9 @@ class Client(AsyncApp):
 
         if channel_id != self.config["bot"]["listen-channel"]:
             return
+        
+        if content.startswith("!"): # ignore messages that start with !
+            return
 
         async def sender(num: str):
             self.pending[msg_ts] = event = DoubleEvent()
