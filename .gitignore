@@ -10,3 +10,5 @@ server-config.toml
 *.app/
 build/
 dist/
+.DS_Store
+*.user

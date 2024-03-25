@@ -3,14 +3,14 @@ example = """
 [bot]
 bot-token = "" # optional key, if you dont fill this in itll pull from the configured network
 app-token = "" # also optional
-listen-channel = "" # the slack channel to listen to
+listen-channel = "" # the slack channel ID to listen to, (eg. Channel ID: C06Q284BDRT)
 ignore-numbers = ["5555", "7777", ""] # these won't be sent automatically
 
 [propresenter]
 v = 6 # or 7
 host = "127.0.0.1"
 port = 55184
-password = ""
+password = "" # must not be blank
 batch-wait-time = 10 # how long to wait for multiple numbers before processing them
 batch-max-count = 3 # how many numbers to batch together
 expire-time = 45

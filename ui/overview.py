@@ -1,5 +1,5 @@
 from __future__ import annotations
-from PySide6.QtWidgets import * # type: ignore
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QStatusBar, QStyle, QCommandLinkButton
 from PySide6.QtCore import Qt
 import threading
 import time
@@ -14,14 +14,17 @@ class Status(QWidget):
         super().__init__()
         self.main = main
 
-        self._layout = QVBoxLayout()
-        self.setLayout(self._layout)
+        self._status_bar = QStatusBar()
+        main.setStatusBar(self._status_bar)
+
+        pixmapi = QStyle.StandardPixmap.SP_MessageBoxCritical
+        icon = self.style().standardIcon(pixmapi)
 
         self.slack_status = QLabel("Slack: Disconnected")
-        self._layout.addWidget(self.slack_status)
+        self._status_bar.addPermanentWidget(self.slack_status)
 
         self.propresenter_status = QLabel("ProPres: Disconnected")
-        self._layout.addWidget(self.propresenter_status)
+        self._status_bar.addPermanentWidget(self.propresenter_status)
 
 
 class Overview(QWidget):
