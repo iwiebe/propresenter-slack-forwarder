@@ -7,6 +7,7 @@ python3.11 -m nuitka \
     --enable-plugin=pyside6 \
     --macos-app-name=Village\ Kids\ Pager \
     --macos-app-mode=gui \
+    --macos-signed-app-name=com.amanca.VKPager \
     --macos-create-app-bundle \
     --macos-app-icon=data/village-kids-pager.iconset/icon_512x512.png \
     main.py

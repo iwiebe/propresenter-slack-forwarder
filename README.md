@@ -2,6 +2,7 @@
 
 ## Build Environment notes
 * Nuitka only supports Python 3.4 — 3.11
+* Cross-compiling not supported, must build on arm64e or x86_64 directly
 
 ## Documentation
 * Slack setup: 
@@ -14,8 +15,7 @@
 ## Coding
 - Better error handling for ProPresenter password missing
 - ProPresenter fails silently, if the first message type doesn't have a token
-- Input Channel ID from Input field
+- Change Channel ID with an Input field
 - Can we pull a list of available channels?
-- Block numbers matching our Emergency codes
 - Add logging level to config file, duplicate console out to log file for Debug level
 
