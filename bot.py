@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import asyncio.mixins
 import collections
@@ -7,12 +9,21 @@ import re
 import os
 import time
 import tomllib
+from typing import TypedDict
 
 import aiohttp
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 import config_example
+
+# region: types
+
+class Channel(TypedDict):
+    name: str
+    id: str
+
+# region: logging
 
 logger = logging.getLogger("bot")
 logger.setLevel(10)
@@ -29,7 +40,7 @@ os.makedirs(home + "/Documents/Village Kids Pager", exist_ok=True)
 
 handler = RotatingFileHandler(home + "/Documents/Village Kids Pager/app-log.log", backupCount=3, maxBytes=100000)
 handler.setFormatter(formatter)
-handler.setLevel(logging.INFO)
+handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 
@@ -129,8 +140,6 @@ class Client(AsyncApp):
         with open(file, "w") as f:
             f.write(config_example.example)
         
-        print(os.path.abspath(file))
-
     async def task_add_batch_to_queue(self):
         batch_max: int = self.config["propresenter"]["batch-max-count"]
         batch_wait: int = self.config["propresenter"]["batch-wait-time"]
@@ -259,7 +268,7 @@ class Client(AsyncApp):
                     self._current_nonce = None
                     self.current_formatted = None
             
-            elif msg["action"] == "presentationTriggerIndex": # ignore this event
+            elif msg["action"] == "presentationTriggerIndex" or msg["action"].startswith("clear"): # ignore these event
                 return
 
             else:
@@ -296,6 +305,17 @@ class Client(AsyncApp):
             return
 
         await self.prop_ws.send_json(payload)
+    
+
+    async def fetch_channel_list(self) -> list[Channel]:
+        """
+        Fetches a list of channels that the bot has access to.
+        """
+        channels = await self.client.users_conversations(exclude_archived=True)
+        return [
+            {"name": x["name"], "id": x["id"]}
+            for x in channels if x["is_channel"]
+        ]
 
     async def setup_asyncio(self):
         logger.handlers[0].setLevel(logging.DEBUG)
@@ -313,14 +333,14 @@ class Client(AsyncApp):
         host = self.config["propresenter"]["host"]
         port = self.config["propresenter"]["port"]
 
-        backoff = 1
+        backoff = 5
 
         while True:
 
             try:
                 self.prop_ws = await client.ws_connect(f"ws://{host}:{port}/remote")
             except Exception as e:
-                backoff *= 2
+                #backoff *= 2
                 logger.error("An error occurred while connecting to propresenter:", exc_info=e)
                 logger.warning(f"failed to connect to propresenter, setting backoff to {backoff} and waiting to try again")
 
@@ -333,8 +353,10 @@ class Client(AsyncApp):
             self._tasks.append(asyncio.create_task(self.task_prop_ws_pump()))
 
             if self.version == 6:
+                logger.info("Connected to propresenter. Version: 6. Sending HELLO")
                 await self.pro6_send_hello()
             elif self.version == 7:
+                logger.info("Connected to propresenter. Version: 7. Sending HELLO")
                 await self.pro7_send_hello()
             else:
                 raise RuntimeError(f"Version must be 6 or 7, not {self.version}")
