@@ -8,7 +8,8 @@ client = bot.Client()
 
 app = QApplication(sys.argv)
 window = MainWindow(client)
-thread = threading.Thread(target=client.run, name="Asyncio Thread", daemon=True)
+client.window = window
+thread = threading.Thread(target=client.run, args=(window,), name="Asyncio Thread", daemon=True)
 thread.start()
 
 window.show()
