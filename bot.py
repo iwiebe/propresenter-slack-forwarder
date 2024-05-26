@@ -9,6 +9,7 @@ import re
 import os
 import time
 import toml
+import yarl
 from typing import TypedDict, TYPE_CHECKING
 
 import aiohttp
@@ -322,7 +323,73 @@ class Client(AsyncApp):
             self.window.setup_err_signal.emit("Could not auto-detect a propresenter message to use. Please set one up and restart the app.")
         else:
             self.write_config()
-                        
+
+    async def propres_create_message(self):
+        client = aiohttp.ClientSession()
+
+        url = yarl.URL(f"http://{self.config['propresenter']['host']}:{self.config['propresenter']['port']}/v1/themes")
+
+        async with client.get(url) as resp:
+            if resp.status != 200:
+                self.window.setup_err_signal.emit("Failed to connect to propresenter: network is not enabled.")
+                return
+            
+            themes = await resp.json()
+            themes = themes["themes"]
+        
+
+        # search themes for vk slide
+        # each theme can have its own VK number so we'll just grab the first one we'll find and the user can fix it if it's wrong
+        # fall back to something random
+        
+        slide = None
+            
+        def finder(slides: list[dict]) -> dict | None:
+            for slide in slides:
+                if "vk" in slide["id"]["name"].lower():
+                    return slide["id"]
+            
+            return None
+        
+        for theme in themes:
+            if slide := finder(theme["slides"]):
+                break
+        
+        if slide is None:
+            slide = themes[0]["slides"][0]["id"] # good enough default, assuming they have at least one theme
+
+        # create payload
+        payload = {
+            "id": {
+                "name": "Test Message",
+                "uuid": "942C3FC3-C4B2-44F7-A55D-4CC913BB8A5D",
+                "index": 0
+            },
+            "message": "VK: {Number}",
+            "tokens": [
+                {
+                    "name": "Number",
+                    "text": {
+                        "text": "142"
+                    }
+                }
+            ],
+            "theme": slide,
+        }
+
+        # send request to create new message
+        url = url.with_path("/v1/messages")
+
+        async with client.post(url) as resp:
+            if resp.status != 200:
+                self.window.setup_err_signal.emit("Failed to connect to propresenter: network is not enabled.")
+            
+            data = await resp.json()
+
+        # store index and token
+            
+        self.prop_message_token = payload["tokens"][0]["name"] # pull from payload for ease of changing
+        self.prop_message_index = data["id"]["index"]
     
 
     async def fetch_channel_list(self) -> list[Channel]:
