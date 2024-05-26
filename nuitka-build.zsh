@@ -1,4 +1,4 @@
-python -m nuitka \
+python3.11 -m nuitka \
     --company-name=AMANCA\ SOFTWARE \
     --product-name=Village\ Kids\ Pager \
     --product-version=1.1.0 \
