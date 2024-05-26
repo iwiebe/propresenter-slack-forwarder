@@ -1,9 +1,10 @@
-python3.11 -m nuitka \
+python -m nuitka \
     --company-name=AMANCA\ SOFTWARE \
     --product-name=Village\ Kids\ Pager \
     --product-version=1.1.0 \
     --copyright=Angelo\ Manca \
     --standalone \
+    --include-data-dir=data=data \
     --enable-plugin=pyside6 \
     --macos-app-name=Village\ Kids\ Pager \
     --macos-app-mode=gui \

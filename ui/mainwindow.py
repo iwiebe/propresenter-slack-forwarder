@@ -1,22 +1,25 @@
 import asyncio
 import threading
-from PySide6.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QApplication
 from PySide6.QtCore import Signal, SignalInstance
 
 from .overview import Overview
+from .widget import WidgetMenu
 from bot import Client
 
 class MainWindow(QMainWindow):
     setup_err_signal: SignalInstance = Signal(str, name="err") # type: ignore
 
-    def __init__(self, client: Client) -> None:
+    def __init__(self, client: Client, app: QApplication) -> None:
         super().__init__()
         self.client = client
 
         self.setWindowTitle("Village Kids Pager")
         self.resize(300,200)
         
-        self.currentPage = Overview(self)
+        self.widget = WidgetMenu(self, app)
+        
+        self.currentPage = Overview(self, self.widget)
         self.setCentralWidget(self.currentPage)
         self.setup_err_signal.connect(self.setup_err_alert)
     
