@@ -18,7 +18,7 @@ class WidgetMenu:
         self.menu = QMenu()
         self.tray = QSystemTrayIcon()
 
-        icon_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "menu-bar.iconset")
+        icon_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "menu-bar-icons")
 
         icon = QIcon(os.path.join(icon_dir, "icon_32x32_alert_0.png"))
         self.tray.setIcon(icon)
