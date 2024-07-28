@@ -4,6 +4,7 @@ python3.11 -m nuitka \
     --product-version=1.1.0 \
     --copyright=Angelo\ Manca \
     --standalone \
+    --include-data-dir=data=data \
     --enable-plugin=pyside6 \
     --macos-app-name=Village\ Kids\ Pager \
     --macos-app-mode=gui \

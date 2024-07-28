@@ -7,7 +7,6 @@ listen-channel = "" # the slack channel ID to listen to, (eg. Channel ID: C06Q28
 ignore-numbers = ["5555", "7777", ""] # these won't be sent automatically
 
 [propresenter]
-v = 6 # or 7
 host = "127.0.0.1"
 port = 55184
 password = "" # must not be blank

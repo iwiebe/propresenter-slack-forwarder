@@ -3,3 +3,4 @@ aiohttp
 pyside6
 nuitka
 imageio
+toml

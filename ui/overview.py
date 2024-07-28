@@ -7,7 +7,8 @@ import time
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .main import MainWindow
+    from .widget import WidgetMenu
+    from .mainwindow import MainWindow
 
 class Status(QWidget):
     def __init__(self, main: MainWindow) -> None:
@@ -28,9 +29,11 @@ class Status(QWidget):
 
 
 class Overview(QWidget):
-    def __init__(self, main: MainWindow) -> None:
+    def __init__(self, main: MainWindow, widget: WidgetMenu) -> None:
         super().__init__()
         self.main = main
+        self.widget: WidgetMenu = widget
+
         self._layout = QHBoxLayout()
         self.setLayout(self._layout)
 
@@ -62,24 +65,31 @@ class Overview(QWidget):
         while True:
             # first manage statuses
 
-            slack = self.main.client.handler.client
-            connected = (not slack.closed
-                and not slack.stale
-                and slack.current_session is not None
-                and not slack.current_session.closed)
+            try:
+                slack = self.main.client.handler.client
+                connected = (not slack.closed
+                    and not slack.stale
+                    and slack.current_session is not None
+                    and not slack.current_session.closed)
+            except:
+                connected = False
                         
             if connected:
                 self.status.slack_status.setText("Slack: Connected")
+                self.widget.slack_status.setText("Slack: Connected")
             else:
                 self.status.slack_status.setText("Slack: Disconnected")
+                self.widget.slack_status.setText("Slack: Disconnected")
 
             propres = self.main.client
             connected = (propres.prop_ws is not None and not propres.prop_ws.closed and propres.prop_authenticated)
 
             if connected:
                 self.status.propresenter_status.setText("ProPres: Connected")
+                self.widget.propres_status.setText("Propresenter: Connected")
             else:
                 self.status.propresenter_status.setText("ProPres: Disconnected")
+                self.widget.propres_status.setText("Propresenter: Disconnected")
 
             # then manage active numbers
             txt = ""
@@ -92,15 +102,22 @@ class Overview(QWidget):
                 else:
                     s = ""
                 
-                txt += f"Active Number{s}: {self.main.client.current_formatted}"
+                current_line = f"Active Number{s}: {self.main.client.current_formatted}"
+                txt += current_line
+                self.widget.queue.setText(current_line)
             
             else:
+                self.widget.queue.setText("Active Number: N/A")
                 txt += "Active Number: N/A"
             
             self.active.setText(txt.strip())
             
             # then queued numbers:
-            queue: list[tuple[tuple[str, str], ...]] = list(self.main.client.number_queue._queue) # type: ignore
+            try:
+                queue: list[tuple[tuple[str, str], ...]] = list(self.main.client.number_queue._queue) # type: ignore
+            except AttributeError:
+                queue = []
+            
             if self.main.client.current_batch:
                 queue.append(tuple(self.main.client.current_batch))
 

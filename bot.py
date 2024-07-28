@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import asyncio.mixins
 import collections
@@ -6,13 +8,26 @@ from logging.handlers import RotatingFileHandler
 import re
 import os
 import time
-import tomllib
+import toml
+import yarl
+from typing import TypedDict, TYPE_CHECKING
 
 import aiohttp
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 import config_example
+
+# region: types
+
+if TYPE_CHECKING:
+    from ui.mainwindow import MainWindow
+
+class Channel(TypedDict):
+    name: str
+    id: str
+
+# region: logging
 
 logger = logging.getLogger("bot")
 logger.setLevel(10)
@@ -29,7 +44,7 @@ os.makedirs(home + "/Documents/Village Kids Pager", exist_ok=True)
 
 handler = RotatingFileHandler(home + "/Documents/Village Kids Pager/app-log.log", backupCount=3, maxBytes=100000)
 handler.setFormatter(formatter)
-handler.setLevel(logging.INFO)
+handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 
@@ -90,24 +105,12 @@ class DoubleEvent(asyncio.Event):
 
 class Client(AsyncApp):
     def __init__(self) -> None:
-        cfg = "config.toml"
-        if not os.path.exists(cfg):
-            cfg = home + "/Documents/Village Kids Pager/config.toml"
-        
-        if not os.path.exists(cfg) or os.path.isdir(cfg):
-            self.setup_config()
-            #raise SystemExit(-1) # TODO: raise notification if not configured (pync?)
-        
-        with open(cfg) as f:
-            self.config = tomllib.loads(f.read())
-        
-        if not self.config["propresenter"]["password"]:
-            raise SystemExit(-1) # TODO: raise notification if not configured (pync?)
-
-        self.version: int = self.config["propresenter"]["v"]
         self.prop_ws: aiohttp.ClientWebSocketResponse | None = None
         self.prop_ws_try_again_at = None
         self.prop_authenticated = False
+
+        self.prop_message_index: int | None = None
+        self.prop_message_token: str | None = None
 
         self._tasks = []
         self.last_number: str | None = None
@@ -129,8 +132,6 @@ class Client(AsyncApp):
         with open(file, "w") as f:
             f.write(config_example.example)
         
-        print(os.path.abspath(file))
-
     async def task_add_batch_to_queue(self):
         batch_max: int = self.config["propresenter"]["batch-max-count"]
         batch_wait: int = self.config["propresenter"]["batch-wait-time"]
@@ -193,9 +194,8 @@ class Client(AsyncApp):
             self._current_nonce = msg_ids
             await self.propres_send_number(formatted)
 
-            if self.version == 7:
-                await self.pro7_send_waiter(msg_ids)
-                self.current_formatted = None
+            await self.pro7_send_waiter(msg_ids)
+            self.current_formatted = None
 
     async def pro7_send_waiter(self, nonces: tuple[str, ...]) -> None:
         # pro7 doesnt send feedback for setting / hiding, so we have to guess based on timing.
@@ -233,11 +233,13 @@ class Client(AsyncApp):
 
                 if not self.prop_authenticated:
                     logger.warning(f"Could not authenticate with ProPresenter: {msg['error']}")
-                    raise SystemExit
+                    self.window.setup_err_signal.emit("The propresenter password is invalid. Correct it and restart the app.")
+                    await self.prop_ws.close()
+                    return
 
                 else:
                     logger.info("Authenticated with propresenter!")
-                    await self.prop_ws.send_json({"action": "messageRequest"})
+                    await self.propres_request_message_list()
 
             elif msg["action"] == "messageHide":  # PRO6 ONLY, MANUAL TIMER FOR PRO7
                 self.available.set()
@@ -259,19 +261,14 @@ class Client(AsyncApp):
                     self._current_nonce = None
                     self.current_formatted = None
             
-            elif msg["action"] == "presentationTriggerIndex": # ignore this event
+            elif msg["action"] == "messageRequest":
+                self.propres_process_message_list(msg["messages"])
+            
+            elif msg["action"] == "presentationTriggerIndex" or msg["action"].startswith("clear"): # ignore these event
                 return
 
             else:
                 logger.debug("Unknown payload: %s", msg)
-
-    async def pro6_send_hello(self) -> None:
-        payload = {"action": "authenticate", "protocol": 600, "password": self.config["propresenter"]["password"]}
-
-        if not self.prop_ws:
-            return
-
-        await self.prop_ws.send_json(payload)
 
     async def pro7_send_hello(self) -> None:
         payload = {"action": "authenticate", "protocol": 701, "password": self.config["propresenter"]["password"]}
@@ -282,7 +279,7 @@ class Client(AsyncApp):
         await self.prop_ws.send_json(payload)
 
     async def propres_send_number(self, number: str) -> None:
-        payload = {"action": "messageSend", "messageIndex": 0, "messageKeys": ["Message"], "messageValues": [number]}
+        payload = {"action": "messageSend", "messageIndex": self.prop_message_index, "messageKeys": [self.prop_message_token], "messageValues": [number]}
 
         if not self.prop_ws:
             return
@@ -296,6 +293,114 @@ class Client(AsyncApp):
             return
 
         await self.prop_ws.send_json(payload)
+
+    async def propres_request_message_list(self):
+        if self.prop_ws is None:
+            return
+        
+        #if self.prop_message_index is None or self.prop_message_token is None:
+        # we'll update this every time
+        await self.prop_ws.send_json({"action": "messageRequest"})
+    
+    def propres_process_message_list(self, msg_list):
+        found = False # cursed but here we are
+        textFinder = re.compile(r"\$\{([a-zA-Z0-9]+)\}")
+
+        for idx, msg in enumerate(msg_list):
+            if "vk" in msg["messageTitle"].lower():
+                components = msg["messageComponents"]
+                for text in components:
+                    if match := textFinder.match(text):
+                        self.prop_message_index = idx
+                        self.prop_message_token = match.group(1)
+                        found = True
+                        break
+            
+            if found:
+                break
+        
+        if not found:
+            self.window.setup_err_signal.emit("Could not auto-detect a propresenter message to use. Please set one up and restart the app.")
+        else:
+            self.write_config()
+
+    async def propres_create_message(self):
+        client = aiohttp.ClientSession()
+
+        url = yarl.URL(f"http://{self.config['propresenter']['host']}:{self.config['propresenter']['port']}/v1/themes")
+
+        async with client.get(url) as resp:
+            if resp.status != 200:
+                self.window.setup_err_signal.emit("Failed to connect to propresenter: network is not enabled.")
+                return
+            
+            themes = await resp.json()
+            themes = themes["themes"]
+        
+
+        # search themes for vk slide
+        # each theme can have its own VK number so we'll just grab the first one we'll find and the user can fix it if it's wrong
+        # fall back to something random
+        
+        slide = None
+            
+        def finder(slides: list[dict]) -> dict | None:
+            for slide in slides:
+                if "vk" in slide["id"]["name"].lower():
+                    return slide["id"]
+            
+            return None
+        
+        for theme in themes:
+            if slide := finder(theme["slides"]):
+                break
+        
+        if slide is None:
+            slide = themes[0]["slides"][0]["id"] # good enough default, assuming they have at least one theme
+
+        # create payload
+        payload = {
+            "id": {
+                "name": "Test Message",
+                "uuid": "942C3FC3-C4B2-44F7-A55D-4CC913BB8A5D",
+                "index": 0
+            },
+            "message": "VK: {Number}",
+            "tokens": [
+                {
+                    "name": "Number",
+                    "text": {
+                        "text": "142"
+                    }
+                }
+            ],
+            "theme": slide,
+        }
+
+        # send request to create new message
+        url = url.with_path("/v1/messages")
+
+        async with client.post(url) as resp:
+            if resp.status != 200:
+                self.window.setup_err_signal.emit("Failed to connect to propresenter: network is not enabled.")
+            
+            data = await resp.json()
+
+        # store index and token
+            
+        self.prop_message_token = payload["tokens"][0]["name"] # pull from payload for ease of changing
+        self.prop_message_index = data["id"]["index"]
+    
+
+    async def fetch_channel_list(self) -> list[Channel]:
+        """
+        Fetches a list of channels that the bot has access to.
+        """
+        channels = await self.client.users_conversations(exclude_archived=True)
+        return [
+            {"name": x["name"], "id": x["id"]}
+            for x in channels if x["is_channel"]
+        ]
 
     async def setup_asyncio(self):
         logger.handlers[0].setLevel(logging.DEBUG)
@@ -313,14 +418,14 @@ class Client(AsyncApp):
         host = self.config["propresenter"]["host"]
         port = self.config["propresenter"]["port"]
 
-        backoff = 1
+        backoff = 5
 
         while True:
 
             try:
                 self.prop_ws = await client.ws_connect(f"ws://{host}:{port}/remote")
             except Exception as e:
-                backoff *= 2
+                #backoff *= 2
                 logger.error("An error occurred while connecting to propresenter:", exc_info=e)
                 logger.warning(f"failed to connect to propresenter, setting backoff to {backoff} and waiting to try again")
 
@@ -332,13 +437,9 @@ class Client(AsyncApp):
 
             self._tasks.append(asyncio.create_task(self.task_prop_ws_pump()))
 
-            if self.version == 6:
-                await self.pro6_send_hello()
-            elif self.version == 7:
-                await self.pro7_send_hello()
-            else:
-                raise RuntimeError(f"Version must be 6 or 7, not {self.version}")
-            
+            logger.info("Connected to propresenter. Sending HELLO")
+            await self.pro7_send_hello()
+
             break
 
     async def on_message(self, message: dict) -> None:
@@ -441,5 +542,53 @@ class Client(AsyncApp):
         self.handler = AsyncSocketModeHandler(self, self.config["bot"]["app-token"])
         await self.handler.start_async()
     
-    def run(self):
+    def read_config(self) -> dict | None:
+        cfg = "config.toml"
+        if not os.path.exists(cfg):
+            cfg = home + "/Documents/Village Kids Pager/config.toml"
+        
+        if not os.path.exists(cfg) or os.path.isdir(cfg):
+            self.setup_config()
+            self.window.setup_err_signal.emit("A config could not be found, and one was generated. Please fill it out and restart the app.")
+            return None
+        
+        with open(cfg) as f:
+            config = toml.load(f)
+        
+        if not config["propresenter"]["password"]:
+            self.window.setup_err_signal.emit("The configured propresenter password is empty. Propresenter does not allow this, please configure a password and restart the app.")
+            return None
+        
+        if "internal" in config:
+            self.prop_message_index = config["internal"].get("prop_msg_idx", None)
+            self.prop_message_token = config["internal"].get("prop_msg_token", None)
+
+        return config
+
+    def write_config(self):
+        config = self.config
+        if config is None:
+            return
+        
+        if "internal" not in config:
+            config["internal"] = {}
+        
+        if self.prop_message_index is not None:
+            config["internal"]["prop_msg_idx"] = self.prop_message_index
+            config["internal"]["prop_msg_token"] = self.prop_message_token
+        
+        cfg = "config.toml"
+        if not os.path.exists(cfg):
+            cfg = home + "/Documents/Village Kids Pager/config.toml"
+        
+        with open(cfg, mode="w") as f:
+            toml.dump(config, f)
+    
+    def run(self, window: MainWindow):
+        self.window = window
+        self.config: dict = self.read_config() # type: ignore
+        
+        if self.config is None:
+            return
+        
         asyncio.run(self.start())
